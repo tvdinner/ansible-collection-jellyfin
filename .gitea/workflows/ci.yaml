@@ -1,0 +1,48 @@
+# tvdinner CI: lint + unit tests + secret scan on the host runner.
+# Runs the same `make` targets as local development (repo convention).
+# Deliberately NOT using actions/setup-python — it does not work on this
+# act_runner (see switchboard's CI design notes); system python3 + pip does.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone tvdinner.core for shared imports
+        run: # TODO(post-merge of tvdinner/ansible-collection-core#2): drop -b, main is the real default branch.
+          git clone --depth 1 -b feat/scaffold-rest-base https://gitea.stump.rocks/tvdinner/ansible-collection-core.git ci-core
+      - name: Install tooling (venv — system pip is externally managed)
+        run: |
+          python3 -m venv /tmp/venv
+          /tmp/venv/bin/pip install --quiet --disable-pip-version-check ansible-core pytest pyyaml yamllint
+      - run: PATH=/tmp/venv/bin:$PATH make lint CORE_PATH=ci-core
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone tvdinner.core for shared imports
+        run: # TODO(post-merge of tvdinner/ansible-collection-core#2): drop -b, main is the real default branch.
+          git clone --depth 1 -b feat/scaffold-rest-base https://gitea.stump.rocks/tvdinner/ansible-collection-core.git ci-core
+      - name: Install tooling (venv — system pip is externally managed)
+        run: |
+          python3 -m venv /tmp/venv
+          /tmp/venv/bin/pip install --quiet --disable-pip-version-check ansible-core pytest
+      - run: PATH=/tmp/venv/bin:$PATH make test CORE_PATH=ci-core
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan for secrets
+        uses: docker://ghcr.io/gitleaks/gitleaks:v8.30.1
+        with:
+          args: detect --redact --verbose --source .

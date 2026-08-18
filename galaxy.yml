@@ -1,0 +1,20 @@
+name: jellyfin
+namespace: tvdinner
+version: 1.0.0
+readme: README.md
+authors:
+  - Joe Stump (@joestump)
+license:
+  - MIT
+tags:
+  - ansible
+  - collection
+  - jellyfin
+  - media
+repository: https://gitea.stump.rocks/tvdinner/ansible-collection-jellyfin
+documentation: https://tvdinner.pages.stump.rocks/ansible-collection-jellyfin/
+homepage: https://gitea.stump.rocks/tvdinner
+issues: https://gitea.stump.rocks/tvdinner/ansible-collection-jellyfin/issues
+description: Manage Jellyfin API keys, libraries and items.
+dependencies:
+  tvdinner.core: '>=1.0.0'
