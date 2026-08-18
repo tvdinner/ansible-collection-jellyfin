@@ -52,6 +52,15 @@ options:
         type: str
         choices: [absent]
         default: absent
+    fail_on_error:
+        description:
+            - Fail the task when any item cannot be deleted. Jellyfin answers
+              500 for items whose underlying file has already disappeared;
+              set this to false to delete what can be deleted and get the
+              rest back in C(failed_items) for DB-level cleanup.
+            - Items that are already gone (404) are never an error.
+        type: bool
+        default: true
 '''
 
 EXAMPLES = r'''
@@ -65,10 +74,30 @@ EXAMPLES = r'''
 
 RETURN = r'''
 deleted:
-    description: Item ids requested for deletion.
+    description: Item ids that were deleted (all requested ids in check mode).
     returned: always
     type: list
     elements: str
+missing:
+    description: Item ids that were already gone (404); not counted as a change.
+    returned: always
+    type: list
+    elements: str
+failed_items:
+    description: Items Jellyfin refused to delete, with the API error.
+    returned: always
+    type: list
+    elements: dict
+    contains:
+        id:
+            description: Item id.
+            type: str
+        status_code:
+            description: HTTP status Jellyfin returned.
+            type: int
+        msg:
+            description: Error message.
+            type: str
 '''
 
 from ansible.module_utils.basic import AnsibleModule
@@ -84,19 +113,38 @@ def run_module():
     argument_spec.update(
         ids=dict(type='list', elements='str', required=True),
         state=dict(type='str', choices=['absent'], default='absent'),
+        fail_on_error=dict(type='bool', default=True),
     )
 
     module = AnsibleModule(argument_spec=argument_spec, supports_check_mode=True)
-    result = dict(changed=False)
+    result = dict(changed=False, deleted=[], missing=[], failed_items=[])
 
     try:
         client = get_client_from_module(module)
         ids = module.params['ids']
 
-        result['changed'] = bool(ids)
-        result['deleted'] = ids
-        if ids and not module.check_mode:
-            client.delete_items(ids)
+        if module.check_mode:
+            result['deleted'] = list(ids)
+            result['changed'] = bool(ids)
+            module.exit_json(**result)
+
+        # One request per item: Jellyfin's batch DELETE /Items?Ids= aborts on
+        # the first bad id, and callers need to know which ids failed.
+        for item_id in ids:
+            try:
+                if client.delete_item(item_id):
+                    result['deleted'].append(item_id)
+                else:
+                    result['missing'].append(item_id)
+            except TVDinnerError as e:
+                result['failed_items'].append(
+                    dict(id=item_id, status_code=e.status_code, msg=str(e)))
+
+        result['changed'] = bool(result['deleted'])
+        if result['failed_items'] and module.params['fail_on_error']:
+            module.fail_json(
+                msg='{0} item(s) could not be deleted'.format(len(result['failed_items'])),
+                **result)
 
         module.exit_json(**result)
 

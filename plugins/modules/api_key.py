@@ -69,15 +69,18 @@ EXAMPLES = r'''
 
 RETURN = r'''
 api_key:
-    description: The key's label and token (token only available on creation).
+    description: The key's label and token.
     returned: when state is present
     type: dict
     contains:
         name:
-            description: Key label.
+            description: Key label (Jellyfin's C(AppName)).
             type: str
         token:
-            description: Access token value, returned only for newly created keys.
+            description:
+                - Access token value. Jellyfin returns tokens from C(GET /Auth/Keys),
+                  so this is populated for existing keys as well as newly created
+                  ones; it is absent only in check mode when the key does not exist yet.
             type: str
 '''
 
@@ -104,24 +107,29 @@ def run_module():
         name = module.params['name']
         state = module.params['state']
 
-        existing = next(
-            (k for k in client.list_keys() if k.get('Name') == name), None)
+        # Newest first, so a label that (historically) got several keys
+        # resolves to the most recently created one.
+        matches = sorted(
+            (k for k in client.list_keys() if k.get('AppName') == name),
+            key=lambda k: k.get('DateCreated') or '', reverse=True)
+        existing = matches[0] if matches else None
 
         if state == 'absent':
-            if existing is not None:
+            if matches:
                 result['changed'] = True
                 if not module.check_mode:
-                    client.delete_key(existing['AccessToken'])
+                    for key in matches:
+                        client.delete_key(key['AccessToken'])
         else:
             if existing is None:
                 result['changed'] = True
                 if not module.check_mode:
-                    created = client.create_key(name) or {}
+                    created = client.create_key(name)
                     result['api_key'] = {'name': name, 'token': created.get('AccessToken')}
                 else:
                     result['api_key'] = {'name': name}
             else:
-                result['api_key'] = {'name': name}
+                result['api_key'] = {'name': name, 'token': existing.get('AccessToken')}
 
         module.exit_json(**result)
 

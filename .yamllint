@@ -14,3 +14,4 @@ rules:
     indent-sequences: consistent
 ignore: |
   build/
+  ci-core/

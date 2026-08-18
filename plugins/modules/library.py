@@ -115,7 +115,7 @@ def run_module():
         state = module.params['state']
 
         existing = next(
-            (l for l in client.list_libraries() if l.get('Name') == name), None)
+            (lib for lib in client.list_libraries() if lib.get('Name') == name), None)
 
         if state == 'absent':
             if existing is not None:

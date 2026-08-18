@@ -19,8 +19,7 @@ test: build-tree
 lint: build-tree
 	$(PYTHON) -m compileall -q plugins tests
 	yamllint .
-	PYTHONPATH=build $(PYTHON) -m flake8 plugins tests --max-line-length=120 2>/dev/null \
-		|| echo "flake8 not installed; skipped"
+	$(PYTHON) -m flake8 plugins tests --max-line-length=120 --extend-ignore=E402
 
 check: lint test
 

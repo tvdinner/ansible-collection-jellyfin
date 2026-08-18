@@ -18,3 +18,11 @@ issues: https://gitea.stump.rocks/tvdinner/ansible-collection-jellyfin/issues
 description: Manage Jellyfin API keys, libraries and items.
 dependencies:
   tvdinner.core: '>=1.0.0'
+build_ignore:
+  - build
+  - ci-core
+  - tests
+  - .gitea
+  - .gitignore
+  - .yamllint
+  - Makefile

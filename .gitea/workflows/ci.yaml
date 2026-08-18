@@ -15,12 +15,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Clone tvdinner.core for shared imports
-        run: # TODO(post-merge of tvdinner/ansible-collection-core#2): drop -b, main is the real default branch.
-          git clone --depth 1 -b feat/scaffold-rest-base https://gitea.stump.rocks/tvdinner/ansible-collection-core.git ci-core
+        run: git clone --depth 1 https://gitea.stump.rocks/tvdinner/ansible-collection-core.git ci-core
       - name: Install tooling (venv — system pip is externally managed)
         run: |
           python3 -m venv /tmp/venv
-          /tmp/venv/bin/pip install --quiet --disable-pip-version-check ansible-core pytest pyyaml yamllint
+          /tmp/venv/bin/pip install --quiet --disable-pip-version-check yamllint flake8
       - run: PATH=/tmp/venv/bin:$PATH make lint CORE_PATH=ci-core
 
   test:
@@ -28,8 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Clone tvdinner.core for shared imports
-        run: # TODO(post-merge of tvdinner/ansible-collection-core#2): drop -b, main is the real default branch.
-          git clone --depth 1 -b feat/scaffold-rest-base https://gitea.stump.rocks/tvdinner/ansible-collection-core.git ci-core
+        run: git clone --depth 1 https://gitea.stump.rocks/tvdinner/ansible-collection-core.git ci-core
       - name: Install tooling (venv — system pip is externally managed)
         run: |
           python3 -m venv /tmp/venv

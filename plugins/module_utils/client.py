@@ -8,7 +8,8 @@ __metaclass__ = type
 from ansible_collections.tvdinner.core.plugins.module_utils.client import (
     AUTH_HEADER,
     RESTClient,
-    TVDinnerError as JellyfinError,
+    TVDinnerError,
+    TVDinnerNotFoundError,
 )
 
 PAGE_SIZE = 500
@@ -21,9 +22,10 @@ class JellyfinClient(RESTClient):
     authentication on every endpoint these methods touch.
     """
 
-    def __init__(self, url, api_key, **kwargs):
+    def __init__(self, url, token, **kwargs):
+        # `token` (not api_key): client_from_module passes token= by keyword.
         super(JellyfinClient, self).__init__(
-            url, api_key, auth_style=AUTH_HEADER,
+            url, token, auth_style=AUTH_HEADER,
             auth_header_name='X-Emby-Token', **kwargs)
 
     # ========== System Methods ==========
@@ -35,16 +37,33 @@ class JellyfinClient(RESTClient):
     # ========== API Key Methods ==========
 
     def list_keys(self):
-        """List API keys."""
-        return self.request('GET', '/Keys') or []
+        """List API keys.
+
+        GET /Auth/Keys returns a QueryResult: C({"Items": [...],
+        "TotalRecordCount": n}). Each item is an AuthenticationInfo whose label
+        is C(AppName) and whose token is C(AccessToken).
+        """
+        result = self.request('GET', '/Auth/Keys')
+        if isinstance(result, dict):
+            return result.get('Items', []) or []
+        return result or []
 
     def create_key(self, name):
-        """Create an API key with the given label."""
-        return self.request('POST', '/Keys', params={'app': name})
+        """Create an API key labelled C(name) and return its AuthenticationInfo.
+
+        POST /Auth/Keys answers 204 with no body, so the new key is found by
+        re-listing and taking the newest entry with that AppName.
+        """
+        self.request('POST', '/Auth/Keys', params={'app': name})
+        matches = [k for k in self.list_keys() if k.get('AppName') == name]
+        if not matches:
+            raise TVDinnerError(
+                'API key {0!r} was accepted but does not appear in /Auth/Keys'.format(name))
+        return sorted(matches, key=lambda k: k.get('DateCreated') or '')[-1]
 
     def delete_key(self, access_token):
         """Delete an API key by its token value."""
-        self.request('DELETE', '/Keys/{0}'.format(access_token))
+        self.request('DELETE', '/Auth/Keys/{0}'.format(access_token))
 
     # ========== Item Methods ==========
 
@@ -89,9 +108,19 @@ class JellyfinClient(RESTClient):
             if not batch or start_index >= total:
                 return items
 
-    def delete_items(self, ids):
-        """Delete one or more items by id."""
-        return self.request('DELETE', '/Items', params={'Ids': ','.join(ids)})
+    def delete_item(self, item_id):
+        """Delete one item by id.
+
+        Returns C(True) when the item was deleted, C(False) when it was
+        already gone (404). Any other API error propagates so the caller can
+        decide per item — Jellyfin answers 500 for items whose file is
+        missing, and playbooks use that to schedule DB-level cleanup.
+        """
+        try:
+            self.request('DELETE', '/Items/{0}'.format(item_id))
+        except TVDinnerNotFoundError:
+            return False
+        return True
 
     # ========== Library Methods ==========
 

@@ -92,7 +92,7 @@ def run_module():
         result['system_info'] = client.get_system_info() or {}
         keys = client.list_keys()
         if module.params['name']:
-            keys = [k for k in keys if k.get('Name') == module.params['name']]
+            keys = [k for k in keys if k.get('AppName') == module.params['name']]
         result['api_keys'] = keys
         module.exit_json(**result)
 
